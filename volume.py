@@ -204,7 +204,7 @@ def schedule_volume_check(proxy_cycle):
             for symbol in symbols:
                 volume_ma_1h(symbol, proxy_cycle)
                 # 每个代币取完数休息，避免请求频繁被币安屏蔽
-                time.sleep(0.3) 
+                time.sleep(0.5) 
 
         # 15分钟K线监控，每个刻钟结束前的10秒钟开始
         # 只监控BTC和ETH
@@ -217,9 +217,9 @@ def schedule_volume_check(proxy_cycle):
 
 
         # 5分钟K线监控，新的5分钟的第3秒开始
-        if now.minute in [0, 5, 20, 25, 35, 40, 50, 55] and now.second == 2:
-            # print(f"⚡ {now.strftime('%Y-%m-%d %H:%M:%S')} 监测BTC异常放量...") 
-            volume_ma_5m(proxy_cycle)
+        # if now.minute in [0, 5, 20, 25, 35, 40, 50, 55] and now.second == 2:
+        #    # print(f"⚡ {now.strftime('%Y-%m-%d %H:%M:%S')} 监测BTC异常放量...") 
+        #    volume_ma_5m(proxy_cycle)
 
 
         # 完成一系列任务休眠1秒
