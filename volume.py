@@ -8,7 +8,7 @@ from notify import dingtalk_notify
 # 币种列表
 symbols = ["BTCUSDT", "ETHUSDT", "XRPUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "ADAUSDT", "LTCUSDT", "SUIUSDT", "LINKUSDT", "WLFIUSDT", "ZECIUSDT"]
 # K线趋势的币种列表
-trend_symbols = ["BTCUSDT", "ETHUSDT"]
+trend_symbols = ["BTCUSDT"]
 
 webhook = "https://oapi.dingtalk.com/robot/send?access_token=8a618559bef6178849439433ef9fe1e9a77a60eec9b45716acf18a1b6d4f8c05"
 
@@ -90,6 +90,8 @@ def volume_ma_15m(symbol, proxy_cycle):
 
     # 开盘价相对MA14的偏离率
     open_deviation = 0
+    # 收盘价相对MA14的偏离率
+    close_deviation = 0
     # 成交量放大倍数
     volume_times = current_volume / volume_ma96
 
@@ -97,29 +99,34 @@ def volume_ma_15m(symbol, proxy_cycle):
     # 开盘价低于MA14，说明当前15分钟K线处于下跌状态
     if (current_open < price_ma14):
         open_deviation = (price_ma14 - current_open) / current_open
+        close_deviation = (price_ma14 - current_close) / current_close
     else:
         open_deviation = (current_open - price_ma14) / price_ma14
+        close_deviation = (current_close - price_ma14) / price_ma14
 
+    # 成交量放大倍数和收盘价偏移量
 
-    # 价格趋势未明的情况下，默认的放量倍数是4.4倍
-    volume_multiple = 4.4
-    # 15分钟K线开盘价偏离MA14的基准，价格趋势未明的情况下默认偏离1%
-    price_deviation = 0.008
+    # 价格趋势未明的情况下，默认的放量倍数是4.5倍
+    volume_multiple = 4.5
+    # 15分钟K线开盘价偏离MA14的基准，价格趋势未明的情况下默认偏离0.6%
+    price_deviation = 0.006
+    # 15分钟K线价格偏离MA14和成交量放大倍数的乘积的基准，越大表示反抽动能越大
+    price_volume_deviation = 0.03 * volume_multiple
     # 仓位大小，量能越大，代表分歧越大，开的仓位越大
-    position = volume_times * 400
+    position = volume_times * 200
 
     # 逆势的情况，逆势操作的高要求      上涨趋势，涨幅过快或者下跌趋势，下跌过快
     if((uptrend and current_open > price_ma14 and current_close > price_ma14) or (downtrend and current_open < price_ma14 and price_ma14 > current_close)):
-        volume_multiple = 6.2
-        position = volume_times * 200
-        price_deviation = 0.016
+        volume_multiple = 6
+        price_deviation = 0.01
+        price_volume_deviation = 0.03 * volume_multiple
 
     # 顺势的情况，顺势操作可以降低要求     上涨趋势的回调或者下跌趋势的反弹
     if((uptrend and current_open < price_ma14 and price_ma14 > current_close) or (downtrend and current_open >  price_ma14 and price_ma14 < current_close) ) :
         # 顺势的放量可以小一点
-        volume_multiple = 2.2
-        position = volume_times * 800
-        price_deviation = 0.004
+        volume_multiple = 2.5
+        price_deviation = 0.003
+        price_volume_deviation = 0.015 * volume_multiple
 
     # print(f"❌ {symbol}，放量倍数基准{volume_multiple:.1f}，开盘价偏离基准{price_deviation:.3f}")
 
@@ -127,7 +134,7 @@ def volume_ma_15m(symbol, proxy_cycle):
     # 开盘价与MA7已经有偏离，避免刚从整理平台选择方向的情况
     if(open_deviation > price_deviation) :
         # 放量价格异动
-        if volume_times >  volume_multiple:
+        if close_deviation * volume_times >  price_volume_deviation:
             # 上一个时段已经通知过，就无需重复通知
             if(current_volume < volumes[-2] * 0.8):
                 print(f"⚠️ {symbol} 本时段成交量比上一时段小，不再重复通知")
@@ -152,7 +159,7 @@ def volume_ma_1h(symbol, proxy_cycle):
     volume_surge(symbol, "1h", 96, 9.5, proxy_cycle)
 
 
-# 判断K线是否放量异常
+# 判断K线的是否放量异常
 # symbol 代币的永续合约名称
 # interval K线周期，如15分钟K线、1小时K线
 # period  均线周期，如MA14、MA96
@@ -213,7 +220,7 @@ def schedule_volume_check(proxy_cycle):
             volume_ma_15m( "BTCUSDT", proxy_cycle)
             # 每个代币取完数休息，避免请求频繁被币安屏蔽
             time.sleep(0.3) 
-            volume_ma_15m( "ETHUSDT", proxy_cycle)
+            # volume_ma_15m( "ETHUSDT", proxy_cycle)
 
 
         # 5分钟K线监控，新的5分钟的第3秒开始
