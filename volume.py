@@ -6,7 +6,7 @@ from trend import trend
 from notify import dingtalk_notify
 
 # 币种列表
-symbols = ["BTCUSDT", "ETHUSDT", "XRPUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "ADAUSDT", "LTCUSDT", "SUIUSDT", "LINKUSDT", "WLFIUSDT", "ZECIUSDT"]
+symbols = ["BTCUSDT", "ETHUSDT", "XRPUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "ADAUSDT", "LTCUSDT", "SUIUSDT", "LINKUSDT", "WLFIUSDT", "ZECUSDT"]
 # K线趋势的币种列表
 trend_symbols = ["BTCUSDT"]
 
@@ -107,34 +107,34 @@ def volume_ma_15m(symbol, proxy_cycle):
     # 成交量放大倍数和收盘价偏移量
 
     # 价格趋势未明的情况下，默认的放量倍数是4.5倍
-    volume_multiple = 4.5
+    volume_multiple = 6
     # 15分钟K线开盘价偏离MA14的基准，价格趋势未明的情况下默认偏离0.6%
-    price_deviation = 0.006
+    open_deviation_threshold = 0.008
     # 15分钟K线价格偏离MA14和成交量放大倍数的乘积的基准，越大表示反抽动能越大
-    price_volume_deviation = 0.03 * volume_multiple
+    price_volume_deviation_threshold = 0.025 * volume_multiple
     # 仓位大小，量能越大，代表分歧越大，开的仓位越大
     position = volume_times * 200
 
     # 逆势的情况，逆势操作的高要求      上涨趋势，涨幅过快或者下跌趋势，下跌过快
-    if((uptrend and current_open > price_ma14 and current_close > price_ma14) or (downtrend and current_open < price_ma14 and price_ma14 > current_close)):
-        volume_multiple = 6
-        price_deviation = 0.01
-        price_volume_deviation = 0.03 * volume_multiple
+    # if((uptrend and current_open > price_ma14 and current_close > price_ma14) or (downtrend and current_open < price_ma14 and price_ma14 > current_close)):
+    #    volume_multiple = 6
+    #    open_deviation_threshold = 0.01
+    #    price_volume_deviation_threshold = 0.025 * volume_multiple
 
     # 顺势的情况，顺势操作可以降低要求     上涨趋势的回调或者下跌趋势的反弹
     if((uptrend and current_open < price_ma14 and price_ma14 > current_close) or (downtrend and current_open >  price_ma14 and price_ma14 < current_close) ) :
         # 顺势的放量可以小一点
         volume_multiple = 2.5
-        price_deviation = 0.003
-        price_volume_deviation = 0.015 * volume_multiple
+        open_deviation_threshold = 0.0
+        price_volume_deviation_threshold = 0.01 * volume_multiple
 
-    # print(f"❌ {symbol}，放量倍数基准{volume_multiple:.1f}，开盘价偏离基准{price_deviation:.3f}")
+    # print(f"❌ {symbol}，放量倍数基准{volume_multiple:.1f}，开盘价偏离基准{open_deviation_threshold:.3f}")
 
 
     # 开盘价与MA7已经有偏离，避免刚从整理平台选择方向的情况
-    if(open_deviation > price_deviation) :
+    if(open_deviation > open_deviation_threshold) :
         # 放量价格异动
-        if close_deviation * volume_times >  price_volume_deviation:
+        if close_deviation * volume_times >  price_volume_deviation_threshold:
             # 上一个时段已经通知过，就无需重复通知
             if(current_volume < volumes[-2] * 0.8):
                 print(f"⚠️ {symbol} 本时段成交量比上一时段小，不再重复通知")
@@ -157,6 +157,51 @@ def volume_ma_5m(proxy_cycle):
 # 1小时K线爆量的监控
 def volume_ma_1h(symbol, proxy_cycle):
     volume_surge(symbol, "1h", 96, 9.5, proxy_cycle)
+
+# 4小时K线的显著缩量判断上涨趋势，取当前的上一个完整周期来分析
+# 价格的MA14、30多头排列，当前价格与MA14偏离不超过0.5%
+# 成交量不到MA14的一半，不到上上一周期的一半
+def volume_ma_4h(symbol, proxy_cycle):
+    # 读取4小时K线最新96根数据
+    data = get_kline(symbol, "4h", 96, proxy_cycle)
+    if not data or len(data) < 32:
+        print(f"❌ {symbol} 数据不足以计算MA30")
+        return
+    # 显著缩量的情况，缩量意味着趋势的延续
+    # 提取成交量（第6个字段）
+    volumes = [float(k[5]) for k in data]  # 第6列是 成交量
+    # 上一周期（倒数第2根，完整周期）的成交量
+    last_volume = volumes[-2]
+    # 上上周期的成交量
+    prev_volume = volumes[-3]   
+    # 计算 MA14（不包含当前未完成的K线）
+    last_volume_ma14 = sum(volumes[-15:-1]) / 14
+    last_volume_ma5 = sum(volumes[-6:-1]) / 5
+    # print(f"{symbol} 上一周期4H成交量: {last_volume}")
+    # print(f"{symbol} 上上周期4H成交量: {prev_volume}")
+    # print(f"{symbol} 上一周期成交量MA14: {volume_ma14:.2f}")
+    if(last_volume < 0.5 * last_volume_ma14 and last_volume < 0.6 * last_volume_ma5): 
+
+        closes = [float(k[4]) for k in data]  # 第5列是 收盘价
+        # 上一周期（倒数第二根，完整周期）的收盘价
+        last_price = closes[-2]
+        print(f"{symbol} 上一周期收盘价{last_price}")
+        last_price_ma14 = sum(closes[-15:-1]) / 14
+        prev_price_ma14 = sum(closes[-16:-2]) / 14
+        # print(f"{symbol} 价格MA14: 上一周期{last_price_ma14},上上周期{prev_price_ma14}")
+        last_price_ma30 = sum(closes[-31:-1]) / 30
+        prev_price_ma30 = sum(closes[-32:-2]) / 30
+        # print(f"{symbol} 价格MA30: 上一周期{last_price_ma30},上上周期{prev_price_ma30}")
+
+        # 价格多头走势： MA30呈上升趋势，MA14高于MA30或者MA14呈上升趋势
+        # 上一周期的收盘价与MA14或者MA30之间偏离度不超过0.005
+        if( (last_price_ma14 > prev_price_ma14 or last_price_ma14 > last_price_ma30) and last_price_ma30 > prev_price_ma30  and  (abs(last_price - last_price_ma14) < 0.005 or abs(last_price - last_price_ma30) < 0.005)  ):
+            # 当前时间
+            now = datetime.now()
+            content=f"Lucky:🚨  {now.strftime('%H:%M:%S')}  ** {symbol} **4小时K线缩量上涨\n"
+            dingtalk_notify(webhook, content)
+
+
 
 
 # 判断K线的是否放量异常
@@ -201,12 +246,12 @@ def schedule_volume_check(proxy_cycle):
         now = datetime.now()
 
         # 每隔15分钟更新一下K线趋势
-        if now.minute in [10, 25, 40, 55] and now.second == 55:
+        if( now.minute in [10, 25, 40, 55] and now.second == 55 ):
             # print(f"⚡ {now.strftime('%Y-%m-%d %H:%M:%S')} 更新K线趋势判断...")
             update_trend_dict(proxy_cycle)
 
         # 1小时K线监控，新的1小时15秒开始
-        if now.minute == 0 and now.second == 15:
+        if( now.minute == 0 and now.second == 15 ):
             print(f"⚡ {now.strftime('%Y-%m-%d %H:%M:%S')} 开始检查1小时成交量...")
             for symbol in symbols:
                 volume_ma_1h(symbol, proxy_cycle)
@@ -215,12 +260,20 @@ def schedule_volume_check(proxy_cycle):
 
         # 15分钟K线监控，每个刻钟结束前的10秒钟开始
         # 只监控BTC和ETH
-        if now.minute in [14, 29, 44, 59] and now.second == 50:
+        if( now.minute in [14, 29, 44, 59] and now.second == 30):
             print(f"⚡ {now.strftime('%Y-%m-%d %H:%M:%S')} 开始检查15分钟成交量...")
             volume_ma_15m( "BTCUSDT", proxy_cycle)
             # 每个代币取完数休息，避免请求频繁被币安屏蔽
-            time.sleep(0.3) 
+            time.sleep(0.5) 
             # volume_ma_15m( "ETHUSDT", proxy_cycle)
+
+        # 4小时K线监控，第3分钟开始
+        if( now.hour % 4 == 0 and now.minute == 3 and now.second == 1):
+            print(f"⚡ {now.strftime('%Y-%m-%d %H:%M:%S')} 开始检查4小时K线...")
+            for symbol in symbols:
+                volume_ma_4h(symbol, proxy_cycle)
+                # 每个代币取完数休息，避免请求频繁被币安屏蔽
+                time.sleep(3)
 
 
         # 5分钟K线监控，新的5分钟的第3秒开始
@@ -247,6 +300,10 @@ if __name__ == "__main__":
     # 测试15分钟K线监控
     # for symbol in symbols:
     #    volume_ma_15m(symbol, proxy_cycle)
+
+    # 测试4小时K线监控
+    # for symbol in symbols:
+    #    volume_ma_4h(symbol, proxy_cycle)
     
     print(f"异常放量的定时程序已经启动...请勿关闭窗口！")
 
